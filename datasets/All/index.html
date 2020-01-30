@@ -54,19 +54,19 @@
 		document.addEventListener("DOMContentLoaded", function() {
 			// Indonesia
 			//mapcoords = [-8.35891, 124.90296]
-			//mapcoords = [-8.50512, 115.96023]
+			mapcoords = [-8.50512, 115.96023]
 			// Solomon Islands
 			//mapcoords = [-5.90145, 156.1256]
 			//mapcoords = [-8.51821, 158.79483]
 			// New Zealand
-			mapcoords = [-39.23225, 178.24219]
+			//mapcoords = [-39.23225, 178.24219]
 			var map = L.map('map', {
 				worldCopyJump: false
-			}).setView([`${mapcoords[0]}`, `${mapcoords[1]}`], 6);
+			}).setView([`${mapcoords[0]}`, `${mapcoords[1]}`], 7);
 					
 			L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
 				attribution: 'Imagery from <a href="http://giscience.uni-hd.de/">GIScience Research Group @ University of Heidelberg</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-				minZoom: 4,
+				minZoom: 7,
 				maxZoom: 16
 			}).addTo(map);
 			
@@ -87,7 +87,7 @@
 				//bounds = '&bounds=89.912109375,-45.18203683701588,174.287109375,-8.19742344383';
 				viewBounds = map.getBounds();
 				bounds = `&bounds=${viewBounds.getWest()},${viewBounds.getSouth()},${viewBounds.getEast()},${viewBounds.getNorth()}`;
-				rank = '&profile_rank=1';
+				rank = '&profile_rank=1,2,3';
 				//limit = '&limit=2000';
 				//dperiod = '&start_date=2015-01-01&end_date=2015-12-30'
 				limit = '';

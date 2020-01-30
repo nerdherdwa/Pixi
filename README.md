@@ -1,6 +1,8 @@
 # Pixi Leaflet
 solving the 10 million points in WOD for Leaflet using Pixi.js and Leaflet.PixiOverlay
 
+![WOD_ALL](images/WOD_ALL_Indonesia.png)
+![WOD_ALL_ZOOM](images/WOD_ALL_Indonesia_zoom.png)
 ![WOD_GLD](images/GLD_WOD_Data_Zoom.png)
 ![WOD_UOR](images/UOR_WOD_Data.png)
 
