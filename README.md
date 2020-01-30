@@ -1,4 +1,5 @@
 # Pixi Leaflet
+solving the 10 million points in WOD for Leaflet using Pixi.js and Leaflet.PixiOverlay
 
 # Install Leaflet
 npm i leaflet
