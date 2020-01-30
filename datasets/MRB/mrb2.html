@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html style="height: 100%; margin: 0;">
+	<head>
+		<title>WOD Points (MRB)</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width">
+		<link rel="stylesheet" href="../../node_modules/leaflet/dist/leaflet.css" />
+		<script src="../../node_modules/leaflet/dist/leaflet.js"></script>
+		<link rel="stylesheet" href="../../css/carte.css"/>
+		<script src="../../node_modules/d3/dist/d3.min.js"></script>
+		<script src="../../node_modules/pixi.js/dist/pixi.min.js"></script>
+		<script src="../../node_modules/leaflet-pixi-overlay/L.PixiOverlay.min.js"></script>
+		<script src="../../js/example.min.js"></script>
+		<script src="../../js/tools.min.js"></script>
+	</head>
+	<body style="height: 100%; margin: 0; overflow: hidden;">
+
+	<div id="map" style="height: 100%; width: 100%;" class="cartes">
+		<div class="legend geometry top center hide">
+			<div class="wrapper">
+				<div class="content"></div>
+			</div>
+		</div>
+	</div>
+	
+	<script>
+		const now = Date.now();
+		var getJSON = function(url, successHandler, errorHandler) {
+			console.log(url);
+			var xhr = typeof XMLHttpRequest != 'undefined'
+				? new XMLHttpRequest()
+				: new ActiveXObject('Microsoft.XMLHTTP');
+			xhr.open('get', url, true);
+			xhr.onreadystatechange = function() {
+				var status;
+				var data;
+				if (xhr.readyState == 4) {
+					status = xhr.status;
+					if (status == 200) {
+						data = JSON.parse(xhr.responseText);
+						successHandler && successHandler(data);
+					} else {
+						errorHandler && errorHandler(status);
+					}
+				}
+			};
+			xhr.send();
+		};
+
+		var loader = new PIXI.loaders.Loader();
+		loader
+			.add('circle', '../../img/circle.png')
+			.add('focusCircle', '../../img/focus-circle.png')
+		document.addEventListener("DOMContentLoaded", function() {
+
+			var map = L.map('map').setView([-23.72501, 100.89844], 8);
+					
+			L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+				attribution: 'Imagery from <a href="http://giscience.uni-hd.de/">GIScience Research Group @ University of Heidelberg</a> | Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+				minZoom: 8,
+				maxZoom: 14
+			}).addTo(map);
+			
+
+			map.attributionControl.setPosition('bottomleft');
+			map.zoomControl.setPosition('bottomright');
+			
+			var legend = document.querySelector('div.legend.geometry');
+			var legendContent = legend.querySelector('.content');
+
+			loader.load(function(loader, resources) {
+				var textures = [resources.circle.texture];
+				var focusTextures = [resources.focusCircle.texture];
+				
+				apiurl ='http://ost-4-dev:7979/wod_envelope_profile_select/v1/{table}?';
+				datasets = 'datasets=MRB';
+				//bounds = '&bounds=89.912109375,-45.18203683701588,174.287109375,-8.19742344383';
+				viewBounds = map.getBounds();
+				bounds = `&bounds=${viewBounds.getWest()},${viewBounds.getSouth()},${viewBounds.getEast()},${viewBounds.getNorth()}`;
+				rank = '&profile_rank=1,2,3';
+				//limit = '&limit=2000';
+				//dperiod = '&start_date=2015-01-01&end_date=2015-12-30'
+				limit = '';
+				dperiod = '';
+
+				getJSON(`${apiurl}${datasets}${dperiod}${bounds}${rank}${limit}`, function(markers) {
+					results = markers.result;
+					console.log(`loaded ${Object.keys(markers.result.features).length} points JSON in ${  (Date.now() - now) / 1000  }s`);
+					// console.log(`Records retrieved: ${Object.keys(markers.result.features).length}`);
+					var pixiLayer = (function() {
+						
+						var firstDraw = true;
+						var prevZoom;
+						var markerSprites = [];
+						var pt_data = ["XBT","UOR","SUR","PFL","OSD","MRB","MBT","GLD","DRB","CTD","APB"];
+						var rank_data = ["1", "2", "3"];
+
+						
+						var colorScale = d3.scaleOrdinal(d3.schemeCategory10)
+							.domain(rank_data);
+
+						var frame = null;
+						var focus = null;
+						var pixiContainer = new PIXI.Container();
+						var doubleBuffering = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+						return L.pixiOverlay(function(utils) {
+							
+							var zoom = utils.getMap().getZoom();
+							if (frame) {
+								cancelAnimationFrame(frame);
+								frame = null;
+							}
+							var container = utils.getContainer();
+							var renderer = utils.getRenderer();
+							var project = utils.latLngToLayerPoint;
+							var scale = utils.getScale();
+							var invScale = 1 / scale;
+							if (firstDraw) {
+								prevZoom = zoom;
+								results.features.forEach(function(marker) {
+									const pixitime = Date.now();
+									var coords = project([marker.geometry.coordinates[1], marker.geometry.coordinates[0]]);
+									var index = 0;
+									var markerSprite = new PIXI.Sprite(textures[index]);
+									markerSprite.textureIndex = index;
+									markerSprite.x0 = coords.x;
+									markerSprite.y0 = coords.y;
+									markerSprite.anchor.set(0.5, 0.5);
+									var tint = d3.color(colorScale( marker.properties.profile_rank)).rgb();
+									markerSprite.tint = 256 * (tint.r * 256 + tint.g) + tint.b;
+									container.addChild(markerSprite);
+									markerSprites.push(markerSprite);
+									markerSprite.legend = `<h2>Profile id: ${marker.properties.profile_id}</h2><br><h3><p>rank: ${marker.properties.profile_rank} profile type: ${marker.properties.profile_type}</h3>`;
+								});
+								console.log("start collision detection");
+								var quadTrees = {};
+								for (var z = map.getMinZoom(); z <= map.getMaxZoom(); z++) {
+									var rInit = ((z <= 7) ? 10 : 24) / utils.getScale(z);
+									quadTrees[z] = window.solveCollision(markerSprites, {r0: rInit, zoom: z});
+								}
+								console.log('ended collision detection');
+								function findMarker(ll) {
+									var layerPoint = project(ll);
+									var quadTree = quadTrees[utils.getMap().getZoom()];
+									var marker;
+									var rMax = quadTree.rMax;
+									var found = false;
+									quadTree.visit(function(quad, x1, y1, x2, y2) {
+										if (!quad.length) {
+											var dx = quad.data.x - layerPoint.x;
+											var dy = quad.data.y - layerPoint.y;
+											var r = quad.data.scale.x * 16;
+											if (dx * dx + dy * dy <= r * r) {
+												marker = quad.data;
+												found = true;
+											}
+										}
+										return found || x1 > layerPoint.x + rMax || x2 + rMax < layerPoint.x || y1 > layerPoint.y + rMax || y2 + rMax < layerPoint.y;
+									});
+									return marker;
+								}
+								console.log('marker clicked');
+								map.on('click', function(e) {
+									var redraw = false;
+									if (focus) {
+										focus.texture = textures[focus.textureIndex];
+										focus = null;
+										L.DomUtil.addClass(legend, 'hide');
+										legendContent.innerHTML = '';
+										redraw = true;
+									}
+									var marker = findMarker(e.latlng);
+									if (marker) {
+										marker.texture = focusTextures[marker.textureIndex];
+										focus = marker;
+										legendContent.innerHTML = marker.legend;
+										L.DomUtil.removeClass(legend, 'hide');
+										redraw = true;
+									}
+									if (redraw) utils.getRenderer().render(container);
+								});
+
+								var self = this;
+								map.on('mousemove', L.Util.throttle(function(e) {
+									var marker = findMarker(e.latlng);
+									if (marker) {
+										L.DomUtil.addClass(self._container, 'leaflet-interactive');
+									} else {
+										L.DomUtil.removeClass(self._container, 'leaflet-interactive');
+									}
+								}, 32));
+							}
+
+							console.log('start drawing markers');
+							if (firstDraw || prevZoom !== zoom) {
+								markerSprites.forEach(function(markerSprite) {
+									var position = markerSprite.cache[zoom];
+									if (firstDraw) {
+										markerSprite.x = position.x;
+										markerSprite.y = position.y;
+										markerSprite.scale.set((position.r * scale < 16) ? position.r / 16 : invScale);
+									} else {
+										markerSprite.currentX = markerSprite.x;
+										markerSprite.currentY = markerSprite.y;
+										markerSprite.targetX = position.x;
+										markerSprite.targetY = position.y;
+										markerSprite.currentScale = markerSprite.scale.x;
+										markerSprite.targetScale = (position.r * scale < 16) ? position.r / 16 : invScale;
+									}
+								});
+							}
+
+							var start = null;
+							var delta = 250;
+							function animate(timestamp) {
+								var progress;
+							if (start === null) start = timestamp;
+							progress = timestamp - start;
+							var lambda = progress / delta;
+							if (lambda > 1) lambda = 1;
+							lambda = lambda * (0.4 + lambda * (2.2 + lambda * -1.6));
+							markerSprites.forEach(function(markerSprite) {
+								markerSprite.x = markerSprite.currentX + lambda * (markerSprite.targetX - markerSprite.currentX);
+								markerSprite.y = markerSprite.currentY + lambda * (markerSprite.targetY - markerSprite.currentY);
+								markerSprite.scale.set(markerSprite.currentScale + lambda * (markerSprite.targetScale - markerSprite.currentScale));
+								});
+								renderer.render(container);
+							if (progress < delta) {
+								frame = requestAnimationFrame(animate);
+							}
+							}
+							if (!firstDraw && prevZoom !== zoom) {
+								frame = requestAnimationFrame(animate);
+							}
+							firstDraw = false;
+							prevZoom = zoom;
+							renderer.render(container);
+						}, pixiContainer, {
+							doubleBuffering: doubleBuffering,
+							destroyInteractionManager: true
+						});
+						
+					})();
+
+					pixiLayer.addTo(map);
+					console.log(`added ${Object.keys(markers.result.features).length} points to map in ${  (Date.now() - now) / 1000  }s`)
+				});
+			});
+		});
+	</script>
+	</body>
+</html>
